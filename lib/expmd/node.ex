@@ -13,4 +13,8 @@ defmodule Expmd.Node do
   def get(name) do
     Agent.get(Expmd.Node, &HashDict.get(&1, name))
   end
+  
+  def get_all do
+    Agent.get(Expmd.Node, &HashDict.values(&1))
+  end
 end

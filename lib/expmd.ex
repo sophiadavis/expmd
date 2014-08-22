@@ -2,7 +2,6 @@ defmodule Expmd do
   use Application
 
   require Logger
-  
 
   def start(_type, _args) do
     import Supervisor.Spec
@@ -39,6 +38,7 @@ defmodule Expmd do
   @alive_resp 121
   @port_req 122
   @port_resp 119
+  @names_req 110
 
   defp serve(socket) do
     case next_message(socket) do
@@ -48,14 +48,22 @@ defmodule Expmd do
         node = %Expmd.Node{port: port, type: type, protocol: protocol, 
                             high_version: high_version, low_version: low_version, 
                             name: name, extra: extra}
-          Expmd.Node.put(name, node)
-          Logger.debug "Alive request: #{inspect node}"
-          :gen_tcp.send(socket, <<@alive_resp, 0, 1::16>>)
-          serve(socket)
-      {:ok, <<@port_req, name::binary>>} ->
-        :gen_tcp.send(socket, connect_response(name))
-        Port.close(socket)
+        Expmd.Node.put(name, node)
+        Logger.debug "Alive request: #{inspect node}, #{inspect self()}"
+        :gen_tcp.send(socket, <<@alive_resp, 0, 1::16>>)
         serve(socket)
+      
+      {:ok, <<@port_req, name::binary>>} ->
+        response = connect_response(name)
+        :gen_tcp.send(socket, response)
+        :ok = :gen_tcp.close(socket)
+        
+      {:ok, <<@names_req>>} -> 
+        node_list = Expmd.Node.get_all
+        {:ok, my_port} = :inet.port(socket)
+        :gen_tcp.send(socket, <<my_port::32>>)
+        Enum.each(node_list, fn node -> :gen_tcp.send(socket, "name #{node.name} at port #{node.port}\n") end)
+        :ok = :gen_tcp.close(socket)
 
       {:error, reason} ->
         Logger.info "TCP exited with reason: #{inspect reason}"
@@ -73,12 +81,12 @@ defmodule Expmd do
   end
   
   defp connect_response(name) do
-    Logger.debug "Connect request to: #{name}"
-    case Agent.get(Expmd.Node, &HashDict.get(&1, name)) do
-      nil -> <<@port_resp, 1>>
+    case Expmd.Node.get(name) do
+      nil -> 
+        Logger.debug "Connect request to: #{name} failed."
+        <<@port_resp, 1>>
       node -> 
-        Logger.info inspect node
-        Logger.info inspect node.port
+        Logger.debug "Connect request to: #{name} on port #{node.port}."
         name_len = byte_size(node.name)
         extra_len = byte_size(node.extra)
         <<@port_resp, 0, node.port::16, node.type, 
