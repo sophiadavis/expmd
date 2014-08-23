@@ -9,11 +9,8 @@ defmodule Expmd do
     {:ok, port} = Application.fetch_env(:expmd, :port)
 
     children = [
-      # Task.Supervisor.start_link([name: Expmd.Pool])
       supervisor(Task.Supervisor, [[name: Expmd.Pool]]),
-      # Expmd.Node.start_link
       worker(Expmd.Node, []),
-      # Task.start_link(Expmd, :accept, [port])
       worker(Task, [Expmd, :accept, [port]])
     ]
 
@@ -48,11 +45,17 @@ defmodule Expmd do
         node = %Expmd.Node{port: port, type: type, protocol: protocol, 
                             high_version: high_version, low_version: low_version, 
                             name: name, extra: extra}
-        Expmd.Node.put(name, node)
         Logger.debug "Alive request: #{inspect node}, #{inspect self()}"
-        :gen_tcp.send(socket, <<@alive_resp, 0, 1::16>>)
-        serve(socket)
-      
+        case Expmd.Node.put(name, node) do
+          :ok -> 
+            :gen_tcp.send(socket, <<@alive_resp, 0, 1::16>>)
+            {:error, reason} = :gen_tcp.recv(socket, 0)
+            Expmd.Node.delete(name)
+          :error -> 
+            :gen_tcp.send(socket, <<@alive_resp, 1, 1::16>>)
+            :ok = :gen_tcp.close(socket)
+        end
+        
       {:ok, <<@port_req, name::binary>>} ->
         response = connect_response(name)
         :gen_tcp.send(socket, response)
