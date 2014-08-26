@@ -10,7 +10,7 @@ defmodule Expmd do
 
     children = [
       supervisor(Task.Supervisor, [[name: Expmd.Pool]]),
-      worker(Expmd.Node, []),
+      worker(Expmd.Node, [[name: Expmd.Node]]), # name: Expmd.Node
       worker(Task, [Expmd, :accept, [port]])
     ]
 
@@ -46,11 +46,11 @@ defmodule Expmd do
                             high_version: high_version, low_version: low_version, 
                             name: name, extra: extra}
         Logger.debug "Alive request: #{inspect node}, #{inspect self()}"
-        case Expmd.Node.put(name, node) do
+        case Expmd.Node.put(Expmd.Node, name, node) do
           :ok -> 
             :gen_tcp.send(socket, <<@alive_resp, 0, 1::16>>)
             {:error, reason} = :gen_tcp.recv(socket, 0)
-            Expmd.Node.delete(name)
+            Expmd.Node.delete(Expmd.Node, name)
           :error -> 
             :gen_tcp.send(socket, <<@alive_resp, 1, 1::16>>)
             :ok = :gen_tcp.close(socket)
@@ -62,7 +62,7 @@ defmodule Expmd do
         :ok = :gen_tcp.close(socket)
         
       {:ok, <<@names_req>>} -> 
-        node_list = Expmd.Node.get_all
+        node_list = Expmd.Node.get_all(Expmd.Node)
         {:ok, my_port} = :inet.port(socket)
         :gen_tcp.send(socket, <<my_port::32>>)
         Enum.each(node_list, fn node -> :gen_tcp.send(socket, "name #{node.name} at port #{node.port}\n") end)
@@ -84,7 +84,7 @@ defmodule Expmd do
   end
   
   defp connect_response(name) do
-    case Expmd.Node.get(name) do
+    case Expmd.Node.get(Expmd.Node, name) do
       nil -> 
         Logger.debug "Connect request to: #{name} failed."
         <<@port_resp, 1>>
