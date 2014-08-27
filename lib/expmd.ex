@@ -10,7 +10,7 @@ defmodule Expmd do
 
     children = [
       supervisor(Task.Supervisor, [[name: Expmd.Pool]]),
-      worker(Expmd.Node, [[name: Expmd.Node]]), # name: Expmd.Node
+      worker(Expmd.Node, [[name: Expmd.Node]]),
       worker(Task, [Expmd, :accept, [port]])
     ]
 
@@ -30,33 +30,30 @@ defmodule Expmd do
     Task.Supervisor.start_child(Expmd.Pool, fn -> serve(client) end)
     loop_acceptor(socket)
   end
-
+    
+  @doc """
+  Distribution protocol response and request identifiers.
+  """
   @alive_req 120
   @alive_resp 121
-  @port_req 122
-  @port_resp 119
+  @connect_req 122
+  @connect_resp 119
   @names_req 110
-
+    
+  """
+  Parse request and send appropriate response.
+  The connection is closed after each successful interaction.
+  """
   defp serve(socket) do
     case next_message(socket) do
       {:ok, <<@alive_req, port::16, type, protocol, high_version::16, low_version::16,
               nlen::16, name::binary-size(nlen), elen::16, extra::binary-size(elen)>>} ->
-        
         node = %Expmd.Node{port: port, type: type, protocol: protocol, 
-                            high_version: high_version, low_version: low_version, 
-                            name: name, extra: extra}
-        Logger.debug "Alive request: #{inspect node}, #{inspect self()}"
-        case Expmd.Node.put(Expmd.Node, name, node) do
-          :ok -> 
-            :gen_tcp.send(socket, <<@alive_resp, 0, 1::16>>)
-            {:error, reason} = :gen_tcp.recv(socket, 0)
-            Expmd.Node.delete(Expmd.Node, name)
-          :error -> 
-            :gen_tcp.send(socket, <<@alive_resp, 1, 1::16>>)
-            :ok = :gen_tcp.close(socket)
-        end
+                        high_version: high_version, low_version: low_version, 
+                        name: name, extra: extra}
+        register_and_send_alive_response(name, node, socket)
         
-      {:ok, <<@port_req, name::binary>>} ->
+      {:ok, <<@connect_req, name::binary>>} ->
         response = connect_response(name)
         :gen_tcp.send(socket, response)
         :ok = :gen_tcp.close(socket)
@@ -72,7 +69,11 @@ defmodule Expmd do
         Logger.info "TCP exited with reason: #{inspect reason}"
     end
   end
-
+  
+  """
+  Determine length of incoming message and extract request. 
+  (Each EPMD request begins with a two-byte integer indicating the total length of the message.)
+  """
   defp next_message(socket) do
     case :gen_tcp.recv(socket, 2) do
       {:ok, <<int::16>>} ->
@@ -83,18 +84,43 @@ defmodule Expmd do
     end
   end
   
+  """
+  Handle request to contact node with name `name`.
+  If such a node is currently registered, the response contains the port where it
+    is running and other information.
+  Otherwise, an error response is sent.
+  """
   defp connect_response(name) do
     case Expmd.Node.get(Expmd.Node, name) do
       nil -> 
-        Logger.debug "Connect request to: #{name} failed."
-        <<@port_resp, 1>>
+        Logger.debug "Connect request to #{name} failed."
+        <<@connect_resp, 1>>
       node -> 
-        Logger.debug "Connect request to: #{name} on port #{node.port}."
+        Logger.debug "Connect request to #{name} on port #{node.port}."
         name_len = byte_size(node.name)
         extra_len = byte_size(node.extra)
-        <<@port_resp, 0, node.port::16, node.type, 
+        <<@connect_resp, 0, node.port::16, node.type, 
           node.protocol, node.high_version::16, node.low_version::16, 
           name_len::16, node.name::binary-size(name_len), extra_len::16, node.extra::binary-size(extra_len)>>
+    end
+  end
+  
+  """
+  Handle request to register a new node under name `name`.
+  If another node is already registered with this name, an error response is sent.
+  Otherwise, information about the new node is registered, and a response indicating success is sent.
+  """
+  defp register_and_send_alive_response(name, node, socket) do
+    Logger.debug "Alive request: #{inspect node}, #{inspect self()}"
+    
+    case Expmd.Node.put(Expmd.Node, name, node) do
+      :ok -> 
+        :gen_tcp.send(socket, <<@alive_resp, 0, 1::16>>)
+        {:error, _reason} = :gen_tcp.recv(socket, 0)
+        Expmd.Node.delete(Expmd.Node, name)
+      :error -> 
+        :gen_tcp.send(socket, <<@alive_resp, 1, 1::16>>)
+        :ok = :gen_tcp.close(socket)
     end
   end
 end

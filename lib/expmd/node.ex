@@ -1,7 +1,10 @@
 defmodule Expmd.Node do
   use GenServer
   require Logger
-
+  
+  @doc """ 
+  The fields necessary to register a named node.
+  """
   defstruct [port: 0, type: 77, protocol: 0, high_version: 5, low_version: 5, name: "", extra: ""] 
   
   def start_link(opts \\ []) do
@@ -9,19 +12,31 @@ defmodule Expmd.Node do
     GenServer.start_link(__MODULE__, :ok, opts)
   end
   
+  @doc """ 
+  Registers a node under `name` if no active node with this name is
+    currently registered.
+  """
   def put(server, name, node) do
-    Logger.info "Passing putting off to GenServer, server is #{inspect server}"
     GenServer.call(server, {:put, name, node})
   end
   
+  @doc """ 
+  Returns the information about the node registered under `name`
+  """
   def get(server, name) do
     GenServer.call(server, {:get, name})
   end
   
+  @doc """ 
+  Returns a list of all currently registered nodes.
+  """
   def get_all(server) do
     GenServer.call(server, :getall)
   end
   
+  @doc """ 
+  Deletes the information corresponding to the node with name `name`.
+  """
   def delete(server, name) do
     GenServer.call(server, {:delete, name}) 
   end
@@ -33,7 +48,6 @@ defmodule Expmd.Node do
   end
   
   def handle_call({:put, name, node}, _from, state) do
-    Logger.info "Inside handle call, putting"
     case HashDict.get(state, name) do
       nil -> 
         state = HashDict.put(state, name, node)
