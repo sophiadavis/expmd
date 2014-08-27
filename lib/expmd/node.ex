@@ -5,7 +5,8 @@ defmodule Expmd.Node do
   @doc """ 
   The fields necessary to register a named node.
   """
-  defstruct [port: 0, type: 77, protocol: 0, high_version: 5, low_version: 5, name: "", extra: ""] 
+  defstruct [port: 0, type: 77, protocol: 0, high_version: 5, low_version: 5, 
+             name: "", extra: "", pid: nil, ref: nil] 
   
   def start_link(opts \\ []) do
     Logger.info "Inside GenServer, opts are #{inspect opts}"
@@ -34,22 +35,17 @@ defmodule Expmd.Node do
     GenServer.call(server, :getall)
   end
   
-  @doc """ 
-  Deletes the information corresponding to the node with name `name`.
-  """
-  def delete(server, name) do
-    GenServer.call(server, {:delete, name}) 
-  end
-  
   ### server callbacks
   
   def init(:ok) do
     {:ok, HashDict.new}
   end
   
-  def handle_call({:put, name, node}, _from, state) do
+  def handle_call({:put, name, node}, _from, state) do  
     case HashDict.get(state, name) do
       nil -> 
+        ref = Process.monitor(node.pid)
+        node = %{node | ref: ref}
         state = HashDict.put(state, name, node)
         {:reply, :ok, state}
       _   -> 
@@ -65,7 +61,8 @@ defmodule Expmd.Node do
     {:reply, HashDict.values(state), state}
   end
   
-  def handle_call({:delete, name}, _from, state) do
-    {:reply, nil, HashDict.delete(state, name)}
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
+    {name, _} = Enum.find(state, fn {_, v} -> v.ref == ref end)
+    {:noreply, HashDict.delete(state, name)}
   end
 end

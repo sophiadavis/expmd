@@ -31,7 +31,7 @@ defmodule Expmd do
     loop_acceptor(socket)
   end
     
-  @doc """
+  """
   Distribution protocol response and request identifiers.
   """
   @alive_req 120
@@ -50,7 +50,7 @@ defmodule Expmd do
               nlen::16, name::binary-size(nlen), elen::16, extra::binary-size(elen)>>} ->
         node = %Expmd.Node{port: port, type: type, protocol: protocol, 
                         high_version: high_version, low_version: low_version, 
-                        name: name, extra: extra}
+                        name: name, extra: extra, pid: self()}
         register_and_send_alive_response(name, node, socket)
         
       {:ok, <<@connect_req, name::binary>>} ->
@@ -117,7 +117,6 @@ defmodule Expmd do
       :ok -> 
         :gen_tcp.send(socket, <<@alive_resp, 0, 1::16>>)
         {:error, _reason} = :gen_tcp.recv(socket, 0)
-        Expmd.Node.delete(Expmd.Node, name)
       :error -> 
         :gen_tcp.send(socket, <<@alive_resp, 1, 1::16>>)
         :ok = :gen_tcp.close(socket)
