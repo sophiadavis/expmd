@@ -36,8 +36,8 @@ defmodule Expmd do
   """
   @alive_req 120
   @alive_resp 121
-  @connect_req 122
-  @connect_resp 119
+  @port_req 122
+  @port_resp 119
   @names_req 110
     
   """
@@ -53,8 +53,8 @@ defmodule Expmd do
                         name: name, extra: extra, pid: self()}
         register_and_send_alive_response(name, node, socket)
         
-      {:ok, <<@connect_req, name::binary>>} ->
-        response = connect_response(name)
+      {:ok, <<@port_req, name::binary>>} ->
+        response = port_response(name)
         :gen_tcp.send(socket, response)
         :ok = :gen_tcp.close(socket)
         
@@ -90,16 +90,16 @@ defmodule Expmd do
     is running and other information.
   Otherwise, an error response is sent.
   """
-  defp connect_response(name) do
+  defp port_response(name) do
     case Expmd.Node.get(Expmd.Node, name) do
       nil -> 
         Logger.debug "Connect request to #{name} failed."
-        <<@connect_resp, 1>>
+        <<@port_resp, 1>>
       node -> 
         Logger.debug "Connect request to #{name} on port #{node.port}."
         name_len = byte_size(node.name)
         extra_len = byte_size(node.extra)
-        <<@connect_resp, 0, node.port::16, node.type, 
+        <<@port_resp, 0, node.port::16, node.type, 
           node.protocol, node.high_version::16, node.low_version::16, 
           name_len::16, node.name::binary-size(name_len), extra_len::16, node.extra::binary-size(extra_len)>>
     end
