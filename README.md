@@ -1,9 +1,9 @@
 ExPMD
 =====
 
-An implementation of a replacement Erlang Port Mapper Daemon, written in Elixir.  
+A replacement for the Erlang Port Mapper Daemon, written in Elixir.  
 
-The EPMD is a tcp server written in C, which ships with Erlang. Its job is to store information about all nodes registered on its network, so when any node wants to find out how to contact another node, it contacts the EPMD up for that information. Requests and responses are sent using a binary protocol. This program supports the following requests, according to the EPMD [distribution protocol](http://www.erlang.org/doc/apps/erts/erl_dist_protocol.html):  
+The EPMD is a tcp server written in C, which ships with Erlang. Its job is to store information about all nodes registered on its network, so when any node wants to find out how to contact another node, it contacts the EPMD for that information. Requests and responses are sent using a binary protocol. This program supports the following requests, according to the EPMD [distribution protocol](http://www.erlang.org/doc/apps/erts/erl_dist_protocol.html):  
 
 * Alive request  
 When a named node starts up for the first time (ex: `Node.start(:foo, :shortnames)` or `iex --sname foo`), the EPMD registers the name, port, and other attributes, responding whether or not registration was successful. This connection remains open until the node finally exits, at which point the EPMD discards information pertaining to this node.   
